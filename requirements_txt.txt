@@ -1,0 +1,25 @@
+# Core dependencies
+torch>=2.0.0
+transformers>=4.36.0
+accelerate>=0.25.0
+
+# For interpretability and analysis
+numpy>=1.24.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Utilities
+tqdm>=4.65.0
+pandas>=2.0.0
+
+# Optional: for better performance
+bitsandbytes>=0.41.0  # For 8-bit quantization
+einops>=0.7.0
+
+# Optional: for API access
+openai>=1.0.0
+anthropic>=0.7.0
+
+# Development
+jupyter>=1.0.0
+ipython>=8.12.0
