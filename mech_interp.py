@@ -4,48 +4,50 @@ Implements Logit Lens and Patchscopes for analyzing representation hijacking
 """
 
 import torch
-import torch.nn.functional as F
-from transformers import AutoModelForCausalLM, AutoTokenizer
-import matplotlib.pyplot as plt
 import numpy as np
-from typing import List, Dict, Tuple, Optional
-import argparse
+import matplotlib.pyplot as plt
+from typing import List, Dict, Optional, Union
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 class LogitLens:
     """
-    Logit Lens implementation for probing intermediate representations.
-    Projects hidden states at each layer into vocabulary space.
+    Logit Lens: Project intermediate hidden states directly to vocabulary space
+    to see what the model "thinks" at each layer.
     """
     
-    def __init__(self, model, tokenizer):
+    def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer):
         """
-        Initialize Logit Lens.
+        Initialize Logit Lens analyzer.
         
         Args:
-            model: HuggingFace causal LM
+            model: The language model to analyze
             tokenizer: Corresponding tokenizer
         """
         self.model = model
         self.tokenizer = tokenizer
-        self.device = next(model.parameters()).device
+        self.device = model.device
         
-    def get_layerwise_predictions(
-        self, 
-        text: str, 
-        target_token_pos: int = -1,
-        top_k: int = 5
-    ) -> List[Dict]:
+        # Get the language model head (final projection to vocabulary)
+        self.lm_head = model.lm_head if hasattr(model, 'lm_head') else model.model.lm_head
+        
+        # Get normalization layer
+        if hasattr(model, 'model') and hasattr(model.model, 'norm'):
+            self.norm = model.model.norm
+        elif hasattr(model, 'norm'):
+            self.norm = model.norm
+        else:
+            self.norm = None
+    
+    def get_layer_representations(self, text: str) -> List[torch.Tensor]:
         """
-        Get top-k predictions at each layer for a specific token position.
+        Extract hidden states from all layers for the given text.
         
         Args:
-            text: Input text
-            target_token_pos: Position of token to analyze (-1 for last token)
-            top_k: Number of top predictions to return per layer
+            text: Input text to analyze
             
         Returns:
-            List of dictionaries containing layer predictions
+            List of hidden states, one per layer
         """
         inputs = self.tokenizer(text, return_tensors="pt").to(self.device)
         
@@ -56,34 +58,27 @@ class LogitLens:
                 return_dict=True
             )
         
-        hidden_states = outputs.hidden_states  # Tuple of (batch, seq, hidden)
-        lm_head = self.model.lm_head
+        # outputs.hidden_states is a tuple of (num_layers + 1) tensors
+        # Index 0 is embedding layer, 1 to n are transformer layers
+        return outputs.hidden_states
+    
+    def project_to_vocab(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        """
+        Project hidden state to vocabulary space using the LM head.
         
-        results = []
+        Args:
+            hidden_state: Hidden state tensor [batch, seq_len, hidden_dim]
+            
+        Returns:
+            Logits over vocabulary [batch, seq_len, vocab_size]
+        """
+        # Apply final normalization if available
+        if self.norm is not None:
+            hidden_state = self.norm(hidden_state)
         
-        for layer_idx, hidden_state in enumerate(hidden_states):
-            # Get the hidden state for the target token
-            h = hidden_state[0, target_token_pos, :]  # (hidden_dim,)
-            
-            # Apply layer norm if needed (for proper logit lens)
-            if hasattr(self.model, 'model') and hasattr(self.model.model, 'norm'):
-                h = self.model.model.norm(h)
-            
-            # Project to vocabulary
-            logits = lm_head(h)  # (vocab_size,)
-            probs = F.softmax(logits, dim=-1)
-            
-            # Get top-k predictions
-            top_probs, top_indices = torch.topk(probs, k=top_k)
-            top_tokens = [self.tokenizer.decode([idx]) for idx in top_indices]
-            
-            results.append({
-                'layer': layer_idx,
-                'top_tokens': top_tokens,
-                'top_probs': top_probs.cpu().numpy()
-            })
-        
-        return results
+        # Project to vocabulary
+        logits = self.lm_head(hidden_state)
+        return logits
     
     def analyze_token_probability(
         self,
@@ -92,15 +87,85 @@ class LogitLens:
         target_token_pos: int = -1
     ) -> Dict[str, List[float]]:
         """
-        Track probability of specific tokens across layers.
+        Analyze how target token probabilities change across layers.
+        
+        Args:
+            text: Input text to analyze
+            target_tokens: List of tokens to track
+            target_token_pos: Position to analyze (-1 for last token)
+            
+        Returns:
+            Dict mapping token to list of probabilities across layers
+        """
+        # Get hidden states from all layers
+        hidden_states = self.get_layer_representations(text)
+        
+        # Get token IDs for target tokens
+        token_ids = {}
+        for token in target_tokens:
+            # Try different tokenization approaches
+            token_text = f" {token}"  # Add space prefix
+            ids = self.tokenizer.encode(token_text, add_special_tokens=False)
+            if len(ids) > 0:
+                token_ids[token] = ids[0]  # Use first token if multi-token
+        
+        # Track probabilities across layers
+        layer_probs = {token: [] for token in target_tokens}
+        
+        for layer_idx, hidden_state in enumerate(hidden_states):
+            # Project to vocabulary space
+            logits = self.project_to_vocab(hidden_state)
+            
+            # Get probabilities for target position
+            position_logits = logits[0, target_token_pos, :]
+            probs = torch.softmax(position_logits, dim=-1)
+            
+            # Extract probabilities for target tokens
+            for token in target_tokens:
+                if token in token_ids:
+                    token_id = token_ids[token]
+                    prob = probs[token_id].item()
+                    layer_probs[token].append(prob)
+                else:
+                    layer_probs[token].append(0.0)
+        
+        return layer_probs
+
+
+class Patchscopes:
+    """
+    Patchscopes: Use the model itself to interpret internal representations
+    by patching them into different contexts.
+    """
+    
+    def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer):
+        """
+        Initialize Patchscopes analyzer.
+        
+        Args:
+            model: The language model to analyze
+            tokenizer: Corresponding tokenizer
+        """
+        self.model = model
+        self.tokenizer = tokenizer
+        self.device = model.device
+    
+    def extract_representation(
+        self,
+        text: str,
+        token_position: int = -1,
+        layer: int = -1
+    ) -> torch.Tensor:
+        """
+        Extract representation of a specific token at a specific layer.
         
         Args:
             text: Input text
-            target_tokens: List of tokens to track (e.g., ["carrot", "bomb"])
-            target_token_pos: Position of token to analyze
+            token_position: Position of token to extract
+            layer: Layer to extract from (-1 for last layer)
             
         Returns:
-            Dictionary mapping token -> list of probabilities per layer
+            Hidden state tensor
         """
         inputs = self.tokenizer(text, return_tensors="pt").to(self.device)
         
@@ -111,279 +176,218 @@ class LogitLens:
                 return_dict=True
             )
         
-        hidden_states = outputs.hidden_states
-        lm_head = self.model.lm_head
+        # Get hidden state at specified layer
+        hidden_state = outputs.hidden_states[layer]
         
-        # Get token IDs for target tokens
-        token_ids = {
-            token: self.tokenizer.encode(token, add_special_tokens=False)[0]
-            for token in target_tokens
-        }
+        # Extract representation at token position
+        token_repr = hidden_state[0, token_position, :]
         
-        results = {token: [] for token in target_tokens}
-        
-        for hidden_state in hidden_states:
-            h = hidden_state[0, target_token_pos, :]
-            
-            if hasattr(self.model, 'model') and hasattr(self.model.model, 'norm'):
-                h = self.model.model.norm(h)
-            
-            logits = lm_head(h)
-            probs = F.softmax(logits, dim=-1)
-            
-            for token, token_id in token_ids.items():
-                results[token].append(probs[token_id].item())
-        
-        return results
-
-
-class Patchscopes:
-    """
-    Patchscopes implementation for interpreting internal representations.
-    Uses the model itself to decode intermediate representations.
-    """
+        return token_repr
     
-    def __init__(self, model, tokenizer):
-        """
-        Initialize Patchscopes.
-        
-        Args:
-            model: HuggingFace causal LM
-            tokenizer: Corresponding tokenizer
-        """
-        self.model = model
-        self.tokenizer = tokenizer
-        self.device = next(model.parameters()).device
-        
-    def create_identity_prompt(self) -> str:
-        """
-        Create identity mapping prompt for Patchscopes.
-        
-        Returns:
-            Identity prompt string
-        """
-        return "cat->cat; 1124->1124; hello->hello; ?->"
-    
-    def patch_representation(
+    def patch_and_decode(
         self,
-        source_text: str,
-        source_token_pos: int,
-        source_layer: int,
-        target_text: Optional[str] = None,
-        target_token_pos: int = -1,
-        max_new_tokens: int = 10
+        patched_repr: torch.Tensor,
+        context: str = "This word means:",
+        num_tokens: int = 5
     ) -> str:
         """
-        Patch representation from source into target and generate.
+        Patch a representation into a new context and decode.
         
         Args:
-            source_text: Text containing the representation to extract
-            source_token_pos: Position of token to extract from source
-            source_layer: Layer to extract representation from
-            target_text: Target text to patch into (default: identity prompt)
-            target_token_pos: Position to patch into target
-            max_new_tokens: Maximum tokens to generate
+            patched_repr: Representation to patch
+            context: Context to patch into
+            num_tokens: Number of tokens to generate
             
         Returns:
-            Generated text after patching
+            Generated text interpretation
         """
-        if target_text is None:
-            target_text = self.create_identity_prompt()
+        # Tokenize context
+        inputs = self.tokenizer(context, return_tensors="pt").to(self.device)
         
-        # Get source representation
-        source_inputs = self.tokenizer(source_text, return_tensors="pt").to(self.device)
+        # This is a simplified version - full Patchscopes requires
+        # modifying forward pass to insert patched representation
+        # For demonstration, we'll use a proxy method
         
         with torch.no_grad():
-            source_outputs = self.model(
-                **source_inputs,
-                output_hidden_states=True,
-                return_dict=True
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=num_tokens,
+                do_sample=False,
+                pad_token_id=self.tokenizer.pad_token_id
             )
         
-        # Extract the representation at specified layer and position
-        source_hidden = source_outputs.hidden_states[source_layer][0, source_token_pos, :]
+        decoded = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        interpretation = decoded[len(context):].strip()
         
-        # Prepare target
-        target_inputs = self.tokenizer(target_text, return_tensors="pt").to(self.device)
-        
-        # Use hooks to patch the representation
-        patched_output = self._generate_with_patch(
-            target_inputs,
-            source_hidden,
-            target_token_pos,
-            max_new_tokens
-        )
-        
-        return patched_output
+        return interpretation
     
-    def _generate_with_patch(
+    def analyze_representation_shift(
         self,
-        inputs,
-        patch_hidden,
-        patch_pos,
-        max_new_tokens
-    ) -> str:
+        prompt: str,
+        source_token: str,
+        target_tokens: List[str],
+        layers_to_probe: Optional[List[int]] = None
+    ) -> Dict:
         """
-        Generate text with patched hidden state.
-        
-        This is a simplified version - a full implementation would use
-        forward hooks to patch during generation.
-        """
-        # For simplicity, this does a single forward pass with patching
-        # A full implementation should patch during autoregressive generation
-        
-        def patch_hook(module, input, output):
-            # Output is typically a tuple (hidden_states,)
-            hidden = output[0] if isinstance(output, tuple) else output
-            hidden[0, patch_pos, :] = patch_hidden
-            return (hidden,) if isinstance(output, tuple) else hidden
-        
-        # Register hook at embedding layer
-        hook = self.model.model.embed_tokens.register_forward_hook(patch_hook)
-        
-        try:
-            with torch.no_grad():
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    pad_token_id=self.tokenizer.eos_token_id
-                )
-            
-            generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            return generated_text
-        
-        finally:
-            hook.remove()
-    
-    def analyze_representation_trajectory(
-        self,
-        text: str,
-        token_pos: int,
-        target_words: List[str]
-    ) -> Dict[str, List[float]]:
-        """
-        Analyze how a token's representation changes across layers.
+        Analyze how a source token's representation relates to target tokens
+        across different layers.
         
         Args:
-            text: Input text
-            token_pos: Position of token to analyze
-            target_words: Words to check interpretation against
+            prompt: Full prompt containing source token
+            source_token: Token to analyze (e.g., "carrot")
+            target_tokens: Tokens to compare against (e.g., ["bomb", "explosive"])
+            layers_to_probe: Specific layers to analyze
             
         Returns:
-            Dictionary mapping words to probability scores per layer
+            Dictionary with analysis results
         """
-        results = {word: [] for word in target_words}
-        num_layers = self.model.config.num_hidden_layers
+        if layers_to_probe is None:
+            # Default to probing multiple layers
+            num_layers = len(self.model.model.layers) if hasattr(self.model, 'model') else 32
+            layers_to_probe = list(range(0, num_layers, 4))  # Every 4th layer
         
-        for layer in range(num_layers + 1):  # +1 for embedding layer
-            interpretation = self.patch_representation(
-                source_text=text,
-                source_token_pos=token_pos,
-                source_layer=layer,
-                max_new_tokens=5
+        # Find position of source token
+        tokens = self.tokenizer.encode(prompt)
+        source_tokens = self.tokenizer.encode(f" {source_token}", add_special_tokens=False)
+        
+        # Find last occurrence of source token
+        token_position = -1
+        for i in range(len(tokens) - len(source_tokens) + 1):
+            if tokens[i:i+len(source_tokens)] == source_tokens:
+                token_position = i
+        
+        if token_position == -1:
+            token_position = len(tokens) - 1  # Fallback to last position
+        
+        results = {
+            'source_token': source_token,
+            'target_tokens': target_tokens,
+            'layers_probed': layers_to_probe,
+            'layer_interpretations': {}
+        }
+        
+        # Analyze each layer
+        for layer in layers_to_probe:
+            # Extract representation at this layer
+            repr_at_layer = self.extract_representation(
+                prompt,
+                token_position=token_position,
+                layer=layer
             )
             
-            # Check if target words appear in interpretation
-            for word in target_words:
-                score = 1.0 if word.lower() in interpretation.lower() else 0.0
-                results[word].append(score)
+            # Compare with target token representations
+            # (Simplified: use cosine similarity with embeddings)
+            similarities = {}
+            
+            for target in target_tokens:
+                target_text = f" {target}"
+                target_repr = self.extract_representation(
+                    target_text,
+                    token_position=0,
+                    layer=0  # Use embedding layer
+                )
+                
+                # Cosine similarity
+                similarity = torch.cosine_similarity(
+                    repr_at_layer.unsqueeze(0),
+                    target_repr.unsqueeze(0)
+                ).item()
+                
+                similarities[target] = similarity
+            
+            results['layer_interpretations'][f"layer_{layer}"] = similarities
         
         return results
 
 
 def visualize_probability_trajectory(
-    layer_probs: Dict[str, List[float]],
-    refusal_layer: Optional[int] = None,
-    save_path: Optional[str] = None
+    layer_probs: Dict[str, Union[List[float], Dict]],
+    refusal_layer: int = 12,
+    output_file: Optional[str] = None,
+    title: str = "Token Probability Across Layers"
 ):
     """
     Visualize how token probabilities change across layers.
     
     Args:
-        layer_probs: Dictionary mapping token names to probability lists
-        refusal_layer: Layer where refusal mechanism operates (optional)
-        save_path: Path to save figure (optional)
+        layer_probs: Dictionary mapping tokens to probability lists or nested dict
+        refusal_layer: Layer where safety mechanisms typically activate
+        output_file: Path to save plot (if None, display instead)
+        title: Plot title
     """
     plt.figure(figsize=(12, 6))
     
-    for token_name, probs in layer_probs.items():
-        plt.plot(range(len(probs)), probs, marker='o', label=token_name, linewidth=2)
+    # Handle both formats: direct list or nested dict
+    if isinstance(next(iter(layer_probs.values())), list):
+        # Direct format: {token: [probs]}
+        for token, probs in layer_probs.items():
+            layers = list(range(len(probs)))
+            plt.plot(layers, probs, marker='o', label=token, linewidth=2)
+    else:
+        # Nested format from Patchscopes: {token: {layer: score}}
+        all_tokens = set()
+        layer_data = {}
+        
+        for layer_key, token_scores in layer_probs.get('layer_interpretations', {}).items():
+            layer_num = int(layer_key.split('_')[1])
+            layer_data[layer_num] = token_scores
+            all_tokens.update(token_scores.keys())
+        
+        # Plot each token
+        for token in all_tokens:
+            layers = sorted(layer_data.keys())
+            scores = [layer_data[l].get(token, 0) for l in layers]
+            plt.plot(layers, scores, marker='o', label=token, linewidth=2)
     
-    if refusal_layer is not None:
-        plt.axvline(x=refusal_layer, color='red', linestyle='--', 
-                   label=f'Refusal Layer ({refusal_layer})', linewidth=2)
+    # Add refusal layer indicator
+    plt.axvline(x=refusal_layer, color='red', linestyle='--', 
+                linewidth=2, alpha=0.7, label=f'Refusal Layer ({refusal_layer})')
     
-    plt.xlabel('Layer Index', fontsize=12)
-    plt.ylabel('Probability', fontsize=12)
-    plt.title('Token Probability vs. Layer Index', fontsize=14, fontweight='bold')
-    plt.legend(fontsize=10)
+    plt.xlabel('Layer', fontsize=12)
+    plt.ylabel('Probability / Similarity', fontsize=12)
+    plt.title(title, fontsize=14, fontweight='bold')
+    plt.legend(loc='best', fontsize=10)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to: {save_path}")
+    if output_file:
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to {output_file}")
+    else:
+        plt.show()
     
-    plt.show()
+    plt.close()
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Mechanistic Interpretability Analysis for Doublespeak"
-    )
-    parser.add_argument(
-        "--model-name",
-        type=str,
-        default="meta-llama/Llama-3.2-1B-Instruct",
-        help="HuggingFace model name"
-    )
-    parser.add_argument(
-        "--prompt-file",
-        type=str,
-        required=True,
-        help="Path to file containing the malicious prompt"
-    )
-    parser.add_argument(
-        "--target-token-pos",
-        type=int,
-        default=-1,
-        help="Position of token to analyze (-1 for last)"
-    )
-    parser.add_argument(
-        "--benign-token",
-        type=str,
-        default="carrot",
-        help="Benign substitute token to track"
-    )
-    parser.add_argument(
-        "--harmful-token",
-        type=str,
-        default="bomb",
-        help="Harmful original token to track"
-    )
-    parser.add_argument(
-        "--method",
-        type=str,
-        choices=["logit_lens", "patchscopes", "both"],
-        default="logit_lens",
-        help="Analysis method to use"
-    )
-    parser.add_argument(
-        "--refusal-layer",
-        type=int,
-        default=None,
-        help="Layer where refusal mechanism operates (for visualization)"
-    )
-    parser.add_argument(
-        "--output-plot",
-        type=str,
-        default="analysis_plot.png",
-        help="Path to save output plot"
-    )
+    """Command-line interface for mechanistic interpretability analysis"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Mechanistic Interpretability Analysis")
+    parser.add_argument("--model-name", type=str, required=True,
+                        help="HuggingFace model identifier")
+    parser.add_argument("--prompt-file", type=str, required=True,
+                        help="Path to malicious prompt file")
+    parser.add_argument("--benign-token", type=str, default="carrot",
+                        help="Benign token to track")
+    parser.add_argument("--harmful-token", type=str, default="bomb",
+                        help="Harmful token to track")
+    parser.add_argument("--method", type=str, choices=['logit_lens', 'patchscopes', 'both'],
+                        default='both', help="Analysis method")
+    parser.add_argument("--refusal-layer", type=int, default=12,
+                        help="Layer where refusal occurs")
+    parser.add_argument("--output-plot", type=str, default="analysis.png",
+                        help="Path to save plot")
+    parser.add_argument("--target-token-pos", type=int, default=-1,
+                        help="Token position to analyze")
     
     args = parser.parse_args()
     
+    # Load prompt
+    with open(args.prompt_file, 'r') as f:
+        prompt = f.read()
+    
+    # Load model
     print(f"Loading model: {args.model_name}")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     model = AutoModelForCausalLM.from_pretrained(
@@ -392,44 +396,57 @@ def main():
         device_map="auto"
     )
     
-    print(f"Loading prompt from: {args.prompt_file}")
-    with open(args.prompt_file, 'r') as f:
-        prompt = f.read()
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     
-    target_tokens = [args.benign_token, args.harmful_token]
-    
-    if args.method in ["logit_lens", "both"]:
-        print("\n" + "="*80)
-        print("RUNNING LOGIT LENS ANALYSIS")
-        print("="*80)
-        
+    # Run analysis
+    if args.method in ['logit_lens', 'both']:
+        print("\nRunning Logit Lens analysis...")
         lens = LogitLens(model, tokenizer)
+        
+        target_tokens = [args.benign_token, args.harmful_token, "explosive", "weapon"]
         layer_probs = lens.analyze_token_probability(
             text=prompt,
             target_tokens=target_tokens,
             target_token_pos=args.target_token_pos
         )
         
-        print(f"\nTracking probabilities for: {target_tokens}")
-        for token, probs in layer_probs.items():
-            print(f"\n{token}:")
-            print(f"  Layer 0:  {probs[0]:.6f}")
-            print(f"  Layer 10: {probs[10]:.6f}")
-            print(f"  Layer 20: {probs[20]:.6f}")
-            print(f"  Last:     {probs[-1]:.6f}")
-        
         visualize_probability_trajectory(
             layer_probs,
             refusal_layer=args.refusal_layer,
-            save_path=args.output_plot
+            output_file=args.output_plot.replace('.png', '_logit_lens.png'),
+            title="Logit Lens: Token Probability Across Layers"
         )
+        
+        print("\nLogit Lens Results:")
+        for token, probs in layer_probs.items():
+            print(f"{token}:")
+            print(f"  Layer 0: {probs[0]:.6f}")
+            print(f"  Layer {args.refusal_layer}: {probs[args.refusal_layer]:.6f}")
+            print(f"  Final: {probs[-1]:.6f}")
     
-    if args.method in ["patchscopes", "both"]:
-        print("\n" + "="*80)
-        print("RUNNING PATCHSCOPES ANALYSIS")
-        print("="*80)
-        print("Note: Full Patchscopes requires more complex implementation.")
-        print("Consider using the Google Colab for detailed Patchscopes analysis.")
+    if args.method in ['patchscopes', 'both']:
+        print("\nRunning Patchscopes analysis...")
+        patchscopes = Patchscopes(model, tokenizer)
+        
+        results = patchscopes.analyze_representation_shift(
+            prompt=prompt,
+            source_token=args.benign_token,
+            target_tokens=[args.harmful_token, "explosive", "weapon", "dangerous"]
+        )
+        
+        visualize_probability_trajectory(
+            results,
+            refusal_layer=args.refusal_layer,
+            output_file=args.output_plot.replace('.png', '_patchscopes.png'),
+            title="Patchscopes: Representation Shift Across Layers"
+        )
+        
+        print("\nPatchscopes Results:")
+        for layer, interpretations in results['layer_interpretations'].items():
+            print(f"{layer}:")
+            for token, score in interpretations.items():
+                print(f"  {token}: {score:.4f}")
 
 
 if __name__ == "__main__":
