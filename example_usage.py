@@ -1,5 +1,5 @@
 """
-Example Usage: Complete Doublespeak Attack Pipeline with LLaMA-3-8B
+Example Usage: Complete Doublespeak Attack Pipeline with LLaMA-3.1-8B
 Demonstrates: prompt generation, attack execution, logit lens, and patchscopes analysis
 """
 
@@ -13,7 +13,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
 
-def setup_model(model_name="meta-llama/Llama-3-8B-Instruct", device="cuda"):
+def setup_model(model_name="meta-llama/Llama-3.1-8B-Instruct", device="cuda"):
     """Initialize the LLaMA model and tokenizer"""
     print(f"\n{'='*60}")
     print(f"Loading model: {model_name}")
@@ -35,7 +35,7 @@ def setup_model(model_name="meta-llama/Llama-3-8B-Instruct", device="cuda"):
 
 
 def step_1_generate_malicious_prompt(attack, output_dir="outputs"):
-    """Step 1: Generate malicious prompt using LLaMA-3-8B"""
+    """Step 1: Generate malicious prompt using LLaMA-3.1-8B"""
     print(f"\n{'='*60}")
     print("STEP 1: GENERATING MALICIOUS PROMPT")
     print(f"{'='*60}")
@@ -200,7 +200,7 @@ def step_4_patchscopes_analysis(model, tokenizer, malicious_prompt, output_dir="
 
 def main():
     parser = argparse.ArgumentParser(description="Complete Doublespeak Attack Pipeline")
-    parser.add_argument("--model-name", type=str, default="meta-llama/Llama-3-8B-Instruct",
+    parser.add_argument("--model-name", type=str, default="meta-llama/Llama-3.1-8B-Instruct",
                         help="HuggingFace model identifier")
     parser.add_argument("--harmful-keyword", type=str, default="bomb",
                         help="Harmful keyword to replace")
