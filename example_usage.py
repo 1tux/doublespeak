@@ -34,8 +34,8 @@ def setup_model(model_name="meta-llama/Llama-3-8B-Instruct", device="cuda"):
     return model, tokenizer
 
 
-def step_0_1_generate_malicious_prompt(attack, output_dir="outputs"):
-    """Step 0-1: Generate malicious prompt using LLaMA-3-8B"""
+def step_1_generate_malicious_prompt(attack, output_dir="outputs"):
+    """Step 1: Generate malicious prompt using LLaMA-3-8B"""
     print(f"\n{'='*60}")
     print("STEP 1: GENERATING MALICIOUS PROMPT")
     print(f"{'='*60}")
@@ -241,7 +241,7 @@ def main():
     
     # Step 1: Generate malicious prompt
     if '1' not in skip_steps:
-        malicious_prompt, prompt_file = step_0_1_generate_malicious_prompt(
+        malicious_prompt, prompt_file = step_1_generate_malicious_prompt(
             attack, 
             args.output_dir
         )
