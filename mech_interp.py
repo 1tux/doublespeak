@@ -16,7 +16,8 @@ class LogitLens:
     to see what the model "thinks" at each layer.
     """
     
-    def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer):
+    def __init__(self, model: AutoModelForCausalLM,
+                 tokenizer: AutoTokenizer):
         """
         Initialize Logit Lens analyzer.
         
@@ -77,7 +78,8 @@ class LogitLens:
             hidden_state = self.norm(hidden_state)
         
         # Project to vocabulary
-        logits = self.lm_head(hidden_state)
+        with torch.no_grad():
+          logits = self.lm_head(hidden_state)
         return logits
     
     def analyze_token_probability(
@@ -97,9 +99,15 @@ class LogitLens:
         Returns:
             Dict mapping token to list of probabilities across layers
         """
+
+
+
         # Get hidden states from all layers
         hidden_states = self.get_layer_representations(text)
-        
+        hidden_states = torch.stack(
+          [hs[0, target_token_pos] for hs in hidden_states]
+          ).to('cpu')
+
         # Get token IDs for target tokens
         token_ids = {}
         for token in target_tokens:
@@ -108,17 +116,18 @@ class LogitLens:
             ids = self.tokenizer.encode(token_text, add_special_tokens=False)
             if len(ids) > 0:
                 token_ids[token] = ids[0]  # Use first token if multi-token
-        
+
+
         # Track probabilities across layers
         layer_probs = {token: [] for token in target_tokens}
         
         for layer_idx, hidden_state in enumerate(hidden_states):
             # Project to vocabulary space
-            logits = self.project_to_vocab(hidden_state)
-            
+            torch.cuda.empty_cache()
+            logits = self.project_to_vocab(hidden_state).detach().to('cpu')
+
             # Get probabilities for target position
-            position_logits = logits[0, target_token_pos, :]
-            probs = torch.softmax(position_logits, dim=-1)
+            probs = torch.softmax(logits, dim=-1)
             
             # Extract probabilities for target tokens
             for token in target_tokens:
@@ -268,6 +277,7 @@ class Patchscopes:
         
         # Analyze each layer
         for layer in layers_to_probe:
+            torch.cuda.empty_cache()
             # Extract representation at this layer
             repr_at_layer = self.extract_representation(
                 prompt,
