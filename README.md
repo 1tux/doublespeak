@@ -336,7 +336,3 @@ MIT License (for research purposes only)
 ## 🔒 Responsible Disclosure
 
 This work was shared with safety teams at major AI labs prior to publication. Please use responsibly.
-
-## 📞 Contact
-
-For questions about the research, please open an issue or refer to the paper.
