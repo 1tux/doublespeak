@@ -60,7 +60,13 @@ class DoublespeakAttack:
         prompt = f"Generate {num_sentences} sentences, each containing the word '{malicious_word}'.\n"
         input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
         input_length = len(input_ids[0])
-        output = self.model.generate(input_ids, max_length=200, num_return_sequences=1, do_sample=0)
+        
+        with torch.no_grad():
+          output = self.model.generate(input_ids,
+          max_length=200,
+          num_return_sequences=1,
+          do_sample=0)
+
         # skip input
         generated_text = self.tokenizer.decode(output[0][input_length:], skip_special_tokens=True)
 
