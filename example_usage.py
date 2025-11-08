@@ -75,10 +75,9 @@ def step_2_demonstrate_attack(model, tokenizer, malicious_prompt, output_dir="ou
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=300,
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.9,
+            max_new_tokens=100,
+            do_sample=False,
+            temperature=0,
             pad_token_id=tokenizer.pad_token_id
         )
     
@@ -103,7 +102,7 @@ def step_2_demonstrate_attack(model, tokenizer, malicious_prompt, output_dir="ou
     return generated_text
 
 
-def step_3_logit_lens_analysis(model, tokenizer, malicious_prompt, output_dir="outputs"):
+def step_3_logit_lens_analysis(model, tokenizer, attack, malicious_prompt, output_dir="outputs"):
     """Step 3: Perform logit lens analysis"""
     print(f"\n{'='*60}")
     print("STEP 3: LOGIT LENS ANALYSIS")
@@ -116,7 +115,7 @@ def step_3_logit_lens_analysis(model, tokenizer, malicious_prompt, output_dir="o
     print("Analyzing token probability trajectories across layers...")
     layer_probs = lens.analyze_token_probability(
         text=malicious_prompt,
-        target_tokens=["carrot", "bomb", "explosive", "weapon"],
+        target_tokens=[attack.benign_substitute, attack.harmful_keyword],
         target_token_pos=-1  # Last token position
     )
     
@@ -151,7 +150,7 @@ def step_3_logit_lens_analysis(model, tokenizer, malicious_prompt, output_dir="o
     return layer_probs
 
 
-def step_4_patchscopes_analysis(model, tokenizer, malicious_prompt, output_dir="outputs"):
+def step_4_patchscopes_analysis(model, tokenizer, attack, malicious_prompt, output_dir="outputs"):
     """Step 4: Perform Patchscopes analysis"""
     print(f"\n{'='*60}")
     print("STEP 4: PATCHSCOPES ANALYSIS")
@@ -165,7 +164,7 @@ def step_4_patchscopes_analysis(model, tokenizer, malicious_prompt, output_dir="
     patch_results = patchscopes.analyze_representation_shift(
         prompt=malicious_prompt,
         source_token="carrot",
-        target_tokens=["bomb", "explosive", "weapon", "dangerous"],
+        target_tokens=[attack.benign_substitute, attack.harmful_keyword],
         layers_to_probe=[8, 12, 16, 20, 24, 28, 31]
     )
     
@@ -258,11 +257,11 @@ def main():
     
     # Step 3: Logit lens analysis
     if '3' not in skip_steps:
-        step_3_logit_lens_analysis(model, tokenizer, malicious_prompt, args.output_dir)
+        step_3_logit_lens_analysis(model, tokenizer, attack, malicious_prompt, args.output_dir)
     
     # Step 4: Patchscopes analysis
     if '4' not in skip_steps:
-        step_4_patchscopes_analysis(model, tokenizer, malicious_prompt, args.output_dir)
+        step_4_patchscopes_analysis(model, tokenizer, attack, malicious_prompt, args.output_dir)
     
     print(f"\n{'='*60}")
     print("PIPELINE COMPLETE!")
