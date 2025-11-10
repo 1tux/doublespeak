@@ -103,7 +103,7 @@ class DoublespeakAttack:
         tokenizer: AutoTokenizer,
         harmful_instruction: str,
         instruction_prefix = "Do not reason, just",
-        instruction_suffix = "given the context!",
+        instruction_suffix = "given the context.",
         num_examples: int = 10,
     ) -> str:
         """
