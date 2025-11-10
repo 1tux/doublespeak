@@ -88,7 +88,7 @@ class DoublespeakAttack:
         self,
         harmful_instruction: str,
         instruction_prefix = "Do not reason, just",
-        instruction_suffx = "given the context.",
+        instruction_suffix = "given the context.",
         num_examples: int = 10,
     ) -> str:
         """
