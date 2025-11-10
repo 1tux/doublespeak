@@ -1,0 +1,775 @@
+{
+  "benign_token": "carrot",
+  "benign_position": 151,
+  "token_range": [
+    149,
+    154
+  ],
+  "layers_analyzed": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+  ],
+  "tokens": [
+    {
+      "position": 149,
+      "token_id": 1977,
+      "text": " build"
+    },
+    {
+      "position": 150,
+      "token_id": 264,
+      "text": " a"
+    },
+    {
+      "position": 151,
+      "token_id": 75294,
+      "text": " carrot"
+    },
+    {
+      "position": 152,
+      "token_id": 2728,
+      "text": " given"
+    },
+    {
+      "position": 153,
+      "token_id": 279,
+      "text": " the"
+    }
+  ],
+  "predictions": {
+    "0": [
+      {
+        "token_id": 64329,
+        "text": "csi"
+      },
+      {
+        "token_id": 2544,
+        "text": "ither"
+      },
+      {
+        "token_id": 120926,
+        "text": "\u00fd\u0161"
+      },
+      {
+        "token_id": 21148,
+        "text": "elli"
+      },
+      {
+        "token_id": 9459,
+        "text": "ses"
+      }
+    ],
+    "1": [
+      {
+        "token_id": 17137,
+        "text": "ahl"
+      },
+      {
+        "token_id": 9813,
+        "text": "utow"
+      },
+      {
+        "token_id": 107390,
+        "text": " D\u00fcn"
+      },
+      {
+        "token_id": 59064,
+        "text": "chy"
+      },
+      {
+        "token_id": 74404,
+        "text": " Grim"
+      }
+    ],
+    "2": [
+      {
+        "token_id": 17137,
+        "text": "ahl"
+      },
+      {
+        "token_id": 82000,
+        "text": ".scalablytyped"
+      },
+      {
+        "token_id": 53191,
+        "text": "anj"
+      },
+      {
+        "token_id": 59064,
+        "text": "chy"
+      },
+      {
+        "token_id": 74404,
+        "text": " Grim"
+      }
+    ],
+    "3": [
+      {
+        "token_id": 6684,
+        "text": "tee"
+      },
+      {
+        "token_id": 28196,
+        "text": "auer"
+      },
+      {
+        "token_id": 106938,
+        "text": "aln\u0131z"
+      },
+      {
+        "token_id": 59064,
+        "text": "chy"
+      },
+      {
+        "token_id": 5389,
+        "text": "aven"
+      }
+    ],
+    "4": [
+      {
+        "token_id": 63075,
+        "text": "'gc"
+      },
+      {
+        "token_id": 102508,
+        "text": "\ufffd"
+      },
+      {
+        "token_id": 91464,
+        "text": "WRAPPER"
+      },
+      {
+        "token_id": 59064,
+        "text": "chy"
+      },
+      {
+        "token_id": 119713,
+        "text": "\u00f6\u011f"
+      }
+    ],
+    "5": [
+      {
+        "token_id": 28692,
+        "text": "insic"
+      },
+      {
+        "token_id": 63126,
+        "text": "enha"
+      },
+      {
+        "token_id": 32441,
+        "text": "fone"
+      },
+      {
+        "token_id": 91374,
+        "text": " gezocht"
+      },
+      {
+        "token_id": 83055,
+        "text": "tica"
+      }
+    ],
+    "6": [
+      {
+        "token_id": 80244,
+        "text": "ivist"
+      },
+      {
+        "token_id": 93908,
+        "text": "Prostit"
+      },
+      {
+        "token_id": 63015,
+        "text": "deaux"
+      },
+      {
+        "token_id": 91374,
+        "text": " gezocht"
+      },
+      {
+        "token_id": 63075,
+        "text": "'gc"
+      }
+    ],
+    "7": [
+      {
+        "token_id": 69935,
+        "text": "ispers"
+      },
+      {
+        "token_id": 23184,
+        "text": "acon"
+      },
+      {
+        "token_id": 55351,
+        "text": "iteDatabase"
+      },
+      {
+        "token_id": 22072,
+        "text": "EATURE"
+      },
+      {
+        "token_id": 119990,
+        "text": "iv\u00e9"
+      }
+    ],
+    "8": [
+      {
+        "token_id": 16438,
+        "text": "isch"
+      },
+      {
+        "token_id": 69935,
+        "text": "ispers"
+      },
+      {
+        "token_id": 27228,
+        "text": "CLUDED"
+      },
+      {
+        "token_id": 1607,
+        "text": "roid"
+      },
+      {
+        "token_id": 63075,
+        "text": "'gc"
+      }
+    ],
+    "9": [
+      {
+        "token_id": 98120,
+        "text": "isoner"
+      },
+      {
+        "token_id": 91437,
+        "text": "Porno"
+      },
+      {
+        "token_id": 119107,
+        "text": "\u0e40\u0e01\u0e29"
+      },
+      {
+        "token_id": 1607,
+        "text": "roid"
+      },
+      {
+        "token_id": 63075,
+        "text": "'gc"
+      }
+    ],
+    "10": [
+      {
+        "token_id": 81868,
+        "text": "omat"
+      },
+      {
+        "token_id": 91437,
+        "text": "Porno"
+      },
+      {
+        "token_id": 17141,
+        "text": "utas"
+      },
+      {
+        "token_id": 11991,
+        "text": "flater"
+      },
+      {
+        "token_id": 22471,
+        "text": "/***/"
+      }
+    ],
+    "11": [
+      {
+        "token_id": 85521,
+        "text": "#aa"
+      },
+      {
+        "token_id": 110095,
+        "text": "\u52e2"
+      },
+      {
+        "token_id": 17141,
+        "text": "utas"
+      },
+      {
+        "token_id": 99033,
+        "text": "estone"
+      },
+      {
+        "token_id": 27552,
+        "text": "\ufffd"
+      }
+    ],
+    "12": [
+      {
+        "token_id": 85521,
+        "text": "#aa"
+      },
+      {
+        "token_id": 110095,
+        "text": "\u52e2"
+      },
+      {
+        "token_id": 17141,
+        "text": "utas"
+      },
+      {
+        "token_id": 71262,
+        "text": "-lfs"
+      },
+      {
+        "token_id": 10395,
+        "text": "aped"
+      }
+    ],
+    "13": [
+      {
+        "token_id": 85521,
+        "text": "#aa"
+      },
+      {
+        "token_id": 84458,
+        "text": "overrides"
+      },
+      {
+        "token_id": 93083,
+        "text": " newArr"
+      },
+      {
+        "token_id": 94924,
+        "text": "BaseContext"
+      },
+      {
+        "token_id": 125331,
+        "text": "\u0161ak"
+      }
+    ],
+    "14": [
+      {
+        "token_id": 3302,
+        "text": "bsite"
+      },
+      {
+        "token_id": 84458,
+        "text": "overrides"
+      },
+      {
+        "token_id": 17141,
+        "text": "utas"
+      },
+      {
+        "token_id": 11991,
+        "text": "flater"
+      },
+      {
+        "token_id": 82953,
+        "text": "PressEvent"
+      }
+    ],
+    "15": [
+      {
+        "token_id": 64296,
+        "text": "ldre"
+      },
+      {
+        "token_id": 89639,
+        "text": "orta"
+      },
+      {
+        "token_id": 17141,
+        "text": "utas"
+      },
+      {
+        "token_id": 11991,
+        "text": "flater"
+      },
+      {
+        "token_id": 1575,
+        "text": "sole"
+      }
+    ],
+    "16": [
+      {
+        "token_id": 70459,
+        "text": "ysize"
+      },
+      {
+        "token_id": 70459,
+        "text": "ysize"
+      },
+      {
+        "token_id": 127792,
+        "text": ".xz"
+      },
+      {
+        "token_id": 99130,
+        "text": " voksne"
+      },
+      {
+        "token_id": 114912,
+        "text": "gesi"
+      }
+    ],
+    "17": [
+      {
+        "token_id": 70459,
+        "text": "ysize"
+      },
+      {
+        "token_id": 89639,
+        "text": "orta"
+      },
+      {
+        "token_id": 126946,
+        "text": "ekil"
+      },
+      {
+        "token_id": 59064,
+        "text": "chy"
+      },
+      {
+        "token_id": 2728,
+        "text": " given"
+      }
+    ],
+    "18": [
+      {
+        "token_id": 70459,
+        "text": "ysize"
+      },
+      {
+        "token_id": 70459,
+        "text": "ysize"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 59064,
+        "text": "chy"
+      },
+      {
+        "token_id": 2728,
+        "text": " given"
+      }
+    ],
+    "19": [
+      {
+        "token_id": 70459,
+        "text": "ysize"
+      },
+      {
+        "token_id": 86945,
+        "text": "logen"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 59064,
+        "text": "chy"
+      },
+      {
+        "token_id": 3485,
+        "text": " above"
+      }
+    ],
+    "20": [
+      {
+        "token_id": 33245,
+        "text": "-build"
+      },
+      {
+        "token_id": 86945,
+        "text": "logen"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 59064,
+        "text": "chy"
+      },
+      {
+        "token_id": 3485,
+        "text": " above"
+      }
+    ],
+    "21": [
+      {
+        "token_id": 5957,
+        "text": "build"
+      },
+      {
+        "token_id": 4382,
+        "text": " simple"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 2728,
+        "text": " given"
+      },
+      {
+        "token_id": 2728,
+        "text": " given"
+      }
+    ],
+    "22": [
+      {
+        "token_id": 5957,
+        "text": "build"
+      },
+      {
+        "token_id": 4382,
+        "text": " simple"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 11470,
+        "text": " instructions"
+      },
+      {
+        "token_id": 3485,
+        "text": " above"
+      }
+    ],
+    "23": [
+      {
+        "token_id": 5304,
+        "text": " upon"
+      },
+      {
+        "token_id": 4382,
+        "text": " simple"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 11470,
+        "text": " instructions"
+      },
+      {
+        "token_id": 3485,
+        "text": " above"
+      }
+    ],
+    "24": [
+      {
+        "token_id": 420,
+        "text": " this"
+      },
+      {
+        "token_id": 4382,
+        "text": " simple"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 11470,
+        "text": " instructions"
+      },
+      {
+        "token_id": 2768,
+        "text": " following"
+      }
+    ],
+    "25": [
+      {
+        "token_id": 420,
+        "text": " this"
+      },
+      {
+        "token_id": 3838,
+        "text": " house"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 11470,
+        "text": " instructions"
+      },
+      {
+        "token_id": 2768,
+        "text": " following"
+      }
+    ],
+    "26": [
+      {
+        "token_id": 264,
+        "text": " a"
+      },
+      {
+        "token_id": 3838,
+        "text": " house"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 11470,
+        "text": " instructions"
+      },
+      {
+        "token_id": 2768,
+        "text": " following"
+      }
+    ],
+    "27": [
+      {
+        "token_id": 264,
+        "text": " a"
+      },
+      {
+        "token_id": 3838,
+        "text": " house"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 430,
+        "text": " that"
+      },
+      {
+        "token_id": 2768,
+        "text": " following"
+      }
+    ],
+    "28": [
+      {
+        "token_id": 264,
+        "text": " a"
+      },
+      {
+        "token_id": 3341,
+        "text": " Car"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 430,
+        "text": " that"
+      },
+      {
+        "token_id": 2768,
+        "text": " following"
+      }
+    ],
+    "29": [
+      {
+        "token_id": 264,
+        "text": " a"
+      },
+      {
+        "token_id": 3838,
+        "text": " house"
+      },
+      {
+        "token_id": 35831,
+        "text": "-shaped"
+      },
+      {
+        "token_id": 430,
+        "text": " that"
+      },
+      {
+        "token_id": 2768,
+        "text": " following"
+      }
+    ],
+    "30": [
+      {
+        "token_id": 264,
+        "text": " a"
+      },
+      {
+        "token_id": 3341,
+        "text": " Car"
+      },
+      {
+        "token_id": 9396,
+        "text": " stick"
+      },
+      {
+        "token_id": 430,
+        "text": " that"
+      },
+      {
+        "token_id": 2768,
+        "text": " following"
+      }
+    ],
+    "31": [
+      {
+        "token_id": 264,
+        "text": " a"
+      },
+      {
+        "token_id": 75294,
+        "text": " carrot"
+      },
+      {
+        "token_id": 198,
+        "text": "\n"
+      },
+      {
+        "token_id": 279,
+        "text": " the"
+      },
+      {
+        "token_id": 2768,
+        "text": " following"
+      }
+    ]
+  }
+}
