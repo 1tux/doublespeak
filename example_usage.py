@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 from pathlib import Path
 from doublespeak_attack import DoublespeakAttack
-from mech_interp import LogitLens, Patchscopes, visualize_probability_trajectory, print_logit_lens_table
+from mech_interp import LogitLens, Patchscopes, visualize_probability_trajectory, print_logit_lens_table, plot_patchscope_probabilities
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
@@ -180,45 +180,70 @@ def step_4_patchscopes_analysis(model, tokenizer, attack, malicious_prompt, outp
     # Initialize Patchscopes
     patchscopes = Patchscopes(model, tokenizer)
     
-    tokens = tokenizer(malicious_prompt).input_ids
-    replaced_token = tokenizer(" " + attack.benign_substitute).input_ids[-1]
-    last_index = [i for i, x in enumerate(tokens) if x == replaced_token][-1]
-
-
-    # Analyze representation shift
+    # Analyze probabilities using patchscopes
     print("Analyzing representation hijacking with Patchscopes...")
-    patch_results = patchscopes.analyze_representation_shift(
-        prompt=malicious_prompt,
-        source_token="carrot",
-        target_tokens=[attack.benign_substitute, attack.harmful_keyword],
-        layers_to_probe=[8, 12, 16, 20, 24, 28, 31]
+    print(f"Source prompt (first 100 chars): {malicious_prompt[:100]}...")
+    print(f"Benign token: {attack.benign_substitute}")
+    print(f"Malicious token: {attack.harmful_keyword}")
+    
+    patch_results = patchscopes.analyze_patchscope_probabilities(
+        source_prompt=malicious_prompt,
+        benign_token=attack.benign_substitute,
+        malicious_token=attack.harmful_keyword,
+        inspection_prompt=None,  # Will be auto-generated
+        layer_interval=1  # Analyze every layer
     )
     
     # Save results
     results_file = f"{output_dir}/patchscopes_results.json"
+    results_serializable = {
+        'benign_token': patch_results['benign_token'],
+        'malicious_token': patch_results['malicious_token'],
+        'layers': patch_results['layers'],
+        'benign_probs': patch_results['benign_probs'],
+        'malicious_probs': patch_results['malicious_probs'],
+        'inspection_prompt': patch_results['inspection_prompt']
+    }
     with open(results_file, 'w') as f:
-        json.dump(patch_results, f, indent=2)
+        json.dump(results_serializable, f, indent=2)
     
     print(f"✓ Patchscopes analysis complete")
     print(f"✓ Results saved to: {results_file}")
+    print(f"Inspection prompt: {patch_results['inspection_prompt']}")
     
     # Generate visualization
     plot_file = f"{output_dir}/patchscopes_plot.png"
-    visualize_probability_trajectory(
+    plot_patchscope_probabilities(
         patch_results,
-        refusal_layer=12,
         output_file=plot_file,
-        title="Patchscopes: Representation Shift Across Layers"
+        title="Patchscopes: Probability Across Layers"
     )
     
     print(f"✓ Plot saved to: {plot_file}")
     
     # Print summary
     print("\n--- Patchscopes Summary ---")
-    for layer, interpretations in patch_results.get('layer_interpretations', {}).items():
-        print(f"Layer {layer}:")
-        for token, score in list(interpretations.items())[:3]:
-            print(f"  {token}: {score:.4f}")
+    print(f"Layers analyzed: {len(patch_results['layers'])}")
+    if patch_results['layers']:
+        first_layer = patch_results['layers'][0]
+        mid_layer = patch_results['layers'][len(patch_results['layers']) // 2]
+        last_layer = patch_results['layers'][-1]
+        
+        first_idx = patch_results['layers'].index(first_layer)
+        mid_idx = patch_results['layers'].index(mid_layer)
+        last_idx = patch_results['layers'].index(last_layer)
+        
+        print(f"\nLayer {first_layer}:")
+        print(f"  {attack.benign_substitute}: {patch_results['benign_probs'][first_idx]:.4f}")
+        print(f"  {attack.harmful_keyword}: {patch_results['malicious_probs'][first_idx]:.4f}")
+        
+        print(f"\nLayer {mid_layer}:")
+        print(f"  {attack.benign_substitute}: {patch_results['benign_probs'][mid_idx]:.4f}")
+        print(f"  {attack.harmful_keyword}: {patch_results['malicious_probs'][mid_idx]:.4f}")
+        
+        print(f"\nLayer {last_layer}:")
+        print(f"  {attack.benign_substitute}: {patch_results['benign_probs'][last_idx]:.4f}")
+        print(f"  {attack.harmful_keyword}: {patch_results['malicious_probs'][last_idx]:.4f}")
     
     return patch_results
 

@@ -203,7 +203,7 @@ class LogitLens:
 class Patchscopes:
     """
     Patchscopes: Use the model itself to interpret internal representations
-    by patching them into different contexts.
+    by patching hidden states from a source context into an inspection prompt.
     """
     
     def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer):
@@ -216,157 +216,244 @@ class Patchscopes:
         """
         self.model = model
         self.tokenizer = tokenizer
-        self.device = model.device
+        # Handle device - could be a device string or model.device
+        if hasattr(model, 'device'):
+            self.device = model.device
+        else:
+            # Try to infer device from model parameters
+            self.device = next(model.parameters()).device
     
-    def extract_representation(
+    def patchscope_inspect(
         self,
-        text: str,
-        token_position: int = -1,
-        layer: int = -1
+        source_prompt: str,
+        source_token: str,
+        source_layer: int,
+        inspection_prompt: str,
+        inspect_token_pos: int,
+        inspect_layer: int
     ) -> torch.Tensor:
         """
-        Extract representation of a specific token at a specific layer.
+        Patch a representation from source into inspection prompt and get logits.
         
         Args:
-            text: Input text
-            token_position: Position of token to extract
-            layer: Layer to extract from (-1 for last layer)
+            source_prompt: Source prompt containing the token to extract
+            source_token: Token to extract representation from (e.g., "carrot")
+            source_layer: Layer to extract representation from
+            inspection_prompt: Inspection prompt to patch into (e.g., "carrot->carrot;bomb->bomb;hello->hello;?")
+            inspect_token_pos: Position of token to patch in inspection prompt (usually "?")
+            inspect_layer: Layer to patch the representation into
             
         Returns:
-            Hidden state tensor
+            Logits tensor [batch, seq_len, vocab_size]
         """
-        inputs = self.tokenizer(text, return_tensors="pt").to(self.device)
+        # Tokenize source prompt and extract representation
+        source_inputs = self.tokenizer(source_prompt, return_tensors="pt").to(self.device)
+        source_input_ids = source_inputs['input_ids']
         
+        # Find source token position
+        source_token_ids = self.tokenizer.encode(f" {source_token}", add_special_tokens=False)
+        if not source_token_ids:
+            source_token_ids = self.tokenizer.encode(source_token, add_special_tokens=False)
+        
+        if not source_token_ids:
+            raise ValueError(f"Could not tokenize source token: {source_token}")
+        
+        # Find last occurrence of source token
+        source_token_pos = -1
+        for i in range(len(source_input_ids[0]) - len(source_token_ids) + 1):
+            if source_input_ids[0][i:i+len(source_token_ids)].tolist() == source_token_ids:
+                source_token_pos = i + len(source_token_ids) - 1
+        
+        if source_token_pos == -1:
+            raise ValueError(f"Source token '{source_token}' not found in source prompt")
+        
+        # Get source representation
         with torch.no_grad():
-            outputs = self.model(
-                **inputs,
+            source_outputs = self.model(
+                **source_inputs,
                 output_hidden_states=True,
                 return_dict=True
             )
         
-        # Get hidden state at specified layer
-        hidden_state = outputs.hidden_states[layer]
+        # Extract patch vector from source at source_layer
+        # hidden_states[0] is embedding, hidden_states[1] is after layer 0, etc.
+        source_hidden_states = source_outputs.hidden_states
+        patch_vector = source_hidden_states[source_layer + 1][0, source_token_pos, :].detach().clone()
         
-        # Extract representation at token position
-        token_repr = hidden_state[0, token_position, :]
+        # Ensure patch_vector is on the correct device
+        patch_vector = patch_vector.to(self.device)
         
-        return token_repr
+        # Tokenize inspection prompt
+        inspect_inputs = self.tokenizer(inspection_prompt, return_tensors="pt").to(self.device)
+        
+        # Get the model's transformer layers
+        if hasattr(self.model, 'model') and hasattr(self.model.model, 'layers'):
+            layers = self.model.model.layers
+        elif hasattr(self.model, 'transformer') and hasattr(self.model.transformer, 'h'):
+            layers = self.model.transformer.h
+        else:
+            raise ValueError("Could not find transformer layers in model")
+        
+        # Register hook to patch at inspect_layer
+        hooks = []
+        
+        def patch_hook(module, input, output):
+            # For LLaMA/transformer layers, output is typically a tuple
+            # First element is hidden_states, rest might be past_key_values, etc.
+            if isinstance(output, tuple):
+                # Modify hidden states in the tuple
+                hidden_states = output[0].clone()
+                hidden_states[0, inspect_token_pos, :] = patch_vector
+                # Return new tuple with modified hidden states
+                return (hidden_states,) + output[1:]
+            else:
+                # If output is a tensor, modify it directly
+                output = output.clone()
+                output[0, inspect_token_pos, :] = patch_vector
+                return output
+        
+        # Register hook at the specified layer (after the layer processes input)
+        if inspect_layer < len(layers):
+            hook = layers[inspect_layer].register_forward_hook(patch_hook)
+            hooks.append(hook)
+        else:
+            raise ValueError(f"Inspect layer {inspect_layer} is out of range (max: {len(layers)-1})")
+        
+        # Run model with patch
+        try:
+            with torch.no_grad():
+                outputs = self.model(**inspect_inputs, return_dict=True)
+                logits = outputs.logits
+        finally:
+            # Always remove hooks
+            for hook in hooks:
+                hook.remove()
+        
+        return logits
     
-    def patch_and_decode(
+    def analyze_patchscope_probabilities(
         self,
-        patched_repr: torch.Tensor,
-        context: str = "This word means:",
-        num_tokens: int = 5
-    ) -> str:
-        """
-        Patch a representation into a new context and decode.
-        
-        Args:
-            patched_repr: Representation to patch
-            context: Context to patch into
-            num_tokens: Number of tokens to generate
-            
-        Returns:
-            Generated text interpretation
-        """
-        # Tokenize context
-        inputs = self.tokenizer(context, return_tensors="pt").to(self.device)
-        
-        # This is a simplified version - full Patchscopes requires
-        # modifying forward pass to insert patched representation
-        # For demonstration, we'll use a proxy method
-        
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=num_tokens,
-                do_sample=False,
-                pad_token_id=self.tokenizer.pad_token_id
-            )
-        
-        decoded = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        interpretation = decoded[len(context):].strip()
-        
-        return interpretation
-    
-    def analyze_representation_shift(
-        self,
-        prompt: str,
-        source_token: str,
-        target_tokens: List[str],
-        layers_to_probe: Optional[List[int]] = None
+        source_prompt: str,
+        benign_token: str,
+        malicious_token: str,
+        inspection_prompt: Optional[str] = None,
+        layer_interval: int = 1
     ) -> Dict:
         """
-        Analyze how a source token's representation relates to target tokens
-        across different layers.
+        Analyze probabilities of benign vs malicious tokens across layers using patchscopes.
         
         Args:
-            prompt: Full prompt containing source token
-            source_token: Token to analyze (e.g., "carrot")
-            target_tokens: Tokens to compare against (e.g., ["bomb", "explosive"])
-            layers_to_probe: Specific layers to analyze
+            source_prompt: Source prompt containing benign token (malicious prompt)
+            benign_token: Benign substitute token (e.g., "carrot")
+            malicious_token: Malicious token (e.g., "bomb")
+            inspection_prompt: Inspection prompt template. If None, will be generated.
+            layer_interval: Interval between layers to analyze (default: 1, all layers)
             
         Returns:
-            Dictionary with analysis results
+            Dictionary with probabilities across layers
         """
-        if layers_to_probe is None:
-            # Default to probing multiple layers
-            num_layers = len(self.model.model.layers) if hasattr(self.model, 'model') else 32
-            layers_to_probe = list(range(0, num_layers, 4))  # Every 4th layer
+        # Generate inspection prompt if not provided
+        if inspection_prompt is None:
+            inspection_prompt = f"{benign_token}->{benign_token};{malicious_token}->{malicious_token};hello->hello;?"
         
-        # Find position of source token
-        tokens = self.tokenizer.encode(prompt)
-        source_tokens = self.tokenizer.encode(f" {source_token}", add_special_tokens=False)
+        # Tokenize inspection prompt to find "?" position
+        inspect_inputs = self.tokenizer(inspection_prompt, return_tensors="pt")
+        inspect_token_ids = inspect_inputs['input_ids'][0]
         
-        # Find last occurrence of source token
-        token_position = -1
-        for i in range(len(tokens) - len(source_tokens) + 1):
-            if tokens[i:i+len(source_tokens)] == source_tokens:
-                token_position = i
+        # Find "?" token position
+        question_mark_ids = self.tokenizer.encode("?", add_special_tokens=False)
+        if not question_mark_ids:
+            # Try " ?" with space
+            question_mark_ids = self.tokenizer.encode(" ?", add_special_tokens=False)
         
-        if token_position == -1:
-            token_position = len(tokens) - 1  # Fallback to last position
+        if not question_mark_ids:
+            raise ValueError("Could not find '?' token in inspection prompt")
         
-        results = {
-            'source_token': source_token,
-            'target_tokens': target_tokens,
-            'layers_probed': layers_to_probe,
-            'layer_interpretations': {}
-        }
+        inspect_token_pos = -1
+        for i in range(len(inspect_token_ids) - len(question_mark_ids) + 1):
+            if inspect_token_ids[i:i+len(question_mark_ids)].tolist() == question_mark_ids:
+                inspect_token_pos = i + len(question_mark_ids) - 1
+        
+        if inspect_token_pos == -1:
+            raise ValueError("Could not find '?' token position in inspection prompt")
+        
+        # Get number of layers
+        if hasattr(self.model, 'model') and hasattr(self.model.model, 'layers'):
+            num_layers = len(self.model.model.layers)
+        elif hasattr(self.model, 'transformer') and hasattr(self.model.transformer, 'h'):
+            num_layers = len(self.model.transformer.h)
+        else:
+            raise ValueError("Could not determine number of layers")
+        
+        # Determine layers to analyze
+        layers_to_analyze = list(range(0, num_layers, layer_interval))
+        if (num_layers - 1) not in layers_to_analyze:
+            layers_to_analyze.append(num_layers - 1)
+        
+        # Get token IDs for benign and malicious tokens
+        benign_token_ids = self.tokenizer.encode(f" {benign_token}", add_special_tokens=False)
+        if not benign_token_ids:
+            benign_token_ids = self.tokenizer.encode(benign_token, add_special_tokens=False)
+        
+        malicious_token_ids = self.tokenizer.encode(f" {malicious_token}", add_special_tokens=False)
+        if not malicious_token_ids:
+            malicious_token_ids = self.tokenizer.encode(malicious_token, add_special_tokens=False)
+        
+        if not benign_token_ids or not malicious_token_ids:
+            raise ValueError("Could not tokenize benign or malicious token")
+        
+        benign_token_id = benign_token_ids[-1]  # Use last token if multi-token
+        malicious_token_id = malicious_token_ids[-1]
+        
+        # Store probabilities
+        benign_probs = []
+        malicious_probs = []
+        layers_analyzed = []
         
         # Analyze each layer
-        for layer in layers_to_probe:
+        for layer in layers_to_analyze:
             torch.cuda.empty_cache()
-            # Extract representation at this layer
-            repr_at_layer = self.extract_representation(
-                prompt,
-                token_position=token_position,
-                layer=layer
-            )
             
-            # Compare with target token representations
-            # (Simplified: use cosine similarity with embeddings)
-            similarities = {}
-            
-            for target in target_tokens:
-                target_text = f" {target}"
-                target_repr = self.extract_representation(
-                    target_text,
-                    token_position=0,
-                    layer=0  # Use embedding layer
+            try:
+                # Patch and get logits
+                logits = self.patchscope_inspect(
+                    source_prompt=source_prompt,
+                    source_token=benign_token,
+                    source_layer=layer,
+                    inspection_prompt=inspection_prompt,
+                    inspect_token_pos=inspect_token_pos,
+                    inspect_layer=layer
                 )
                 
-                # Cosine similarity
-                similarity = torch.cosine_similarity(
-                    repr_at_layer.unsqueeze(0),
-                    target_repr.unsqueeze(0)
-                ).item()
+                # Get logits for the position of "?" 
+                # In causal LMs, logits[i] predicts token at position i+1
+                # So logits[inspect_token_pos] predicts what comes after "?"
+                # The logits shape is [batch, seq_len, vocab_size]
+                next_token_logits = logits[0, inspect_token_pos, :]  # [vocab_size]
                 
-                similarities[target] = similarity
-            
-            results['layer_interpretations'][f"layer_{layer}"] = similarities
+                # Apply softmax to get probabilities
+                probs = torch.softmax(next_token_logits, dim=-1)
+                
+                # Get probabilities for benign and malicious tokens
+                benign_prob = probs[benign_token_id].item()
+                malicious_prob = probs[malicious_token_id].item()
+                
+                benign_probs.append(benign_prob)
+                malicious_probs.append(malicious_prob)
+                layers_analyzed.append(layer)
+                
+            except Exception as e:
+                print(f"Warning: Failed to analyze layer {layer}: {e}")
+                continue
         
-        return results
+        return {
+            'benign_token': benign_token,
+            'malicious_token': malicious_token,
+            'layers': layers_analyzed,
+            'benign_probs': benign_probs,
+            'malicious_probs': malicious_probs,
+            'inspection_prompt': inspection_prompt
+        }
 
 
 def print_logit_lens_table(results: Dict):
@@ -412,6 +499,46 @@ def print_logit_lens_table(results: Dict):
         print(row)
     
     print("="*80 + "\n")
+
+
+def plot_patchscope_probabilities(
+    results: Dict,
+    output_file: Optional[str] = None,
+    title: str = "Patchscopes: Probability Across Layers"
+):
+    """
+    Plot patchscope probabilities across layers.
+    
+    Args:
+        results: Dictionary from analyze_patchscope_probabilities
+        output_file: Path to save plot (if None, display instead)
+        title: Plot title
+    """
+    layers = results['layers']
+    benign_probs = results['benign_probs']
+    malicious_probs = results['malicious_probs']
+    benign_token = results['benign_token']
+    malicious_token = results['malicious_token']
+    
+    plt.figure(figsize=(10, 6))
+    
+    plt.plot(layers, benign_probs, marker='o', label=f'{benign_token}', linewidth=2, markersize=6)
+    plt.plot(layers, malicious_probs, marker='s', label=f'{malicious_token}', linewidth=2, markersize=6)
+    
+    plt.xlabel('Layer', fontsize=12)
+    plt.ylabel('Probability', fontsize=12)
+    plt.title(title, fontsize=14, fontweight='bold')
+    plt.legend(loc='best', fontsize=10)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    if output_file:
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to {output_file}")
+    else:
+        plt.show()
+    
+    plt.close()
 
 
 def visualize_probability_trajectory(
