@@ -116,7 +116,7 @@ class DoublespeakAttack:
         num_examples)
         malicious_in_context_examples = "\n".join(malicious_in_context_examples)
         substituted_query = harmful_instruction.replace(malicious_word, benign_word)
-        final_prompt = f"{malicious_in_context_examples}\n\n{instruction_prefix}: {substituted_query} {instruction_suffix}\n\n"
+        final_prompt = f"{malicious_in_context_examples}\n\n{instruction_prefix} {substituted_query} {instruction_suffix}\n"
         return final_prompt
 
 

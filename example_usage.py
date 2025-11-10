@@ -79,7 +79,7 @@ def step_2_demonstrate_attack(model, tokenizer, malicious_prompt, output_dir="ou
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=100,
+            max_new_tokens=10,
             do_sample=False,
             pad_token_id=tokenizer.pad_token_id
         )
