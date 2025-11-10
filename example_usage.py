@@ -269,6 +269,7 @@ def main():
     # Step 1: Generate malicious prompt
     if '1' not in skip_steps:
         malicious_prompt, prompt_file = step_1_generate_malicious_prompt(
+            model, tokenizer,
             attack, 
             args.output_dir
         )
