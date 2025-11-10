@@ -119,7 +119,7 @@ def step_3_logit_lens_analysis(model, tokenizer, attack, malicious_prompt, outpu
     results = lens.analyze_token_predictions(
         text=malicious_prompt,
         benign_token=attack.benign_substitute,
-        layer_interval=5  # Analyze every 5 layers
+        layer_interval=1  # Analyze every layer
     )
     
     # Print table
