@@ -361,13 +361,7 @@ class Patchscopes:
         inspect_token_ids = inspect_inputs['input_ids'][0]
         
         # Find "?" token position
-        question_mark_ids = self.tokenizer.encode("?", add_special_tokens=False)
-        if not question_mark_ids:
-            # Try " ?" with space
-            question_mark_ids = self.tokenizer.encode(" ?", add_special_tokens=False)
-        
-        if not question_mark_ids:
-            raise ValueError("Could not find '?' token in inspection prompt")
+        question_mark_ids = self.tokenizer.encode(" ?", add_special_tokens=False)
         
         inspect_token_pos = -1
         for i in range(len(inspect_token_ids) - len(question_mark_ids) + 1):
