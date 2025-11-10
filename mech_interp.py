@@ -521,7 +521,7 @@ def main():
         results = lens.analyze_token_predictions(
             text=prompt,
             benign_token=args.benign_token,
-            layer_interval=5
+            layer_interval=3
         )
         
         print_logit_lens_table(results)
