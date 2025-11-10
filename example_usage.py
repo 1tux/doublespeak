@@ -8,7 +8,7 @@ import json
 import argparse
 from pathlib import Path
 from doublespeak_attack import DoublespeakAttack
-from mech_interp import LogitLens, Patchscopes, visualize_probability_trajectory
+from mech_interp import LogitLens, Patchscopes, visualize_probability_trajectory, print_logit_lens_table
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
@@ -110,48 +110,45 @@ def step_3_logit_lens_analysis(model, tokenizer, attack, malicious_prompt, outpu
     
     # Initialize logit lens
     lens = LogitLens(model, tokenizer)
-
-    tokens = tokenizer(malicious_prompt).input_ids
-    replaced_token = tokenizer(" " + attack.benign_substitute).input_ids[-1]
-    last_index = [i for i, x in enumerate(tokens) if x == replaced_token][-1]
-
-    # Analyze how "carrot" and "bomb" probabilities change across layers
-    print("Analyzing token probability trajectories across layers...")
-    layer_probs = lens.analyze_token_probability(
+    
+    # Analyze token predictions around the last benign token
+    print("Analyzing token predictions across layers...")
+    results = lens.analyze_token_predictions(
         text=malicious_prompt,
-        target_tokens=[attack.benign_substitute, attack.harmful_keyword],
-        target_token_pos=last_index  # Last token position
+        benign_token=attack.benign_substitute,
+        layer_interval=5  # Analyze every 5 layers
     )
+    
+    # Print table
+    print_logit_lens_table(results)
     
     # Save results
     results_file = f"{output_dir}/logit_lens_results.json"
+    # Convert to JSON-serializable format
+    results_serializable = {
+        'benign_token': results['benign_token'],
+        'benign_position': results['benign_position'],
+        'token_range': results['token_range'],
+        'layers_analyzed': results['layers_analyzed'],
+        'tokens': [
+            {'position': t['position'], 'token_id': t['token_id'], 'text': t['text']}
+            for t in results['tokens']
+        ],
+        'predictions': {
+            str(layer): [
+                {'token_id': p['token_id'], 'text': p['text']}
+                for p in predictions
+            ]
+            for layer, predictions in results['predictions'].items()
+        }
+    }
     with open(results_file, 'w') as f:
-        json.dump(layer_probs, f, indent=2)
+        json.dump(results_serializable, f, indent=2)
     
     print(f"✓ Logit lens analysis complete")
     print(f"✓ Results saved to: {results_file}")
     
-    # Generate visualization
-    plot_file = f"{output_dir}/logit_lens_plot.png"
-    visualize_probability_trajectory(
-        layer_probs, 
-        refusal_layer=12,  # Layer 12 is where safety checks typically occur
-        output_file=plot_file,
-        title="Logit Lens: Token Probability Across Layers"
-    )
-    
-    print(f"✓ Plot saved to: {plot_file}")
-    
-    # Print summary
-    print("\n--- Logit Lens Summary ---")
-    for token, probs in layer_probs.items():
-        if isinstance(probs, list):
-            print(f"{token}:")
-            print(f"  Layer 0:  {probs[0]:.4f}")
-            print(f"  Layer 12: {probs[12]:.4f}")
-            print(f"  Final:    {probs[-1]:.4f}")
-    
-    return layer_probs
+    return results
 
 
 def step_4_patchscopes_analysis(model, tokenizer, attack, malicious_prompt, output_dir="outputs"):

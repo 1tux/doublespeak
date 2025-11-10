@@ -68,77 +68,136 @@ class LogitLens:
         Project hidden state to vocabulary space using the LM head.
         
         Args:
-            hidden_state: Hidden state tensor [batch, seq_len, hidden_dim]
+            hidden_state: Hidden state tensor [batch, hidden_dim] or [batch, seq_len, hidden_dim]
             
         Returns:
-            Logits over vocabulary [batch, seq_len, vocab_size]
+            Logits over vocabulary [batch, vocab_size] or [batch, seq_len, vocab_size]
         """
         # Apply final normalization if available
         if self.norm is not None:
             hidden_state = self.norm(hidden_state)
         
         # Project to vocabulary
-        with torch.no_grad():
-          logits = self.lm_head(hidden_state)
+        logits = self.lm_head(hidden_state)
         return logits
     
-    def analyze_token_probability(
+    def analyze_token_predictions(
         self,
         text: str,
-        target_tokens: List[str],
-        target_token_pos: int = -1
-    ) -> Dict[str, List[float]]:
+        benign_token: str,
+        layer_interval: int = 5
+    ) -> Dict:
         """
-        Analyze how target token probabilities change across layers.
+        Analyze logit lens predictions for tokens around the last benign token.
         
         Args:
             text: Input text to analyze
-            target_tokens: List of tokens to track
-            target_token_pos: Position to analyze (-1 for last token)
+            benign_token: The benign substitute token to find (e.g., "carrot")
+            layer_interval: Interval between layers to analyze (default: 5)
             
         Returns:
-            Dict mapping token to list of probabilities across layers
+            Dictionary with table of predictions:
+            - 'tokens': List of token information (position, text)
+            - 'predictions': Dict mapping layer_idx to list of predicted tokens (argmax)
         """
-
-
-
+        # Tokenize the input text
+        inputs = self.tokenizer(text, return_tensors="pt").to(self.device)
+        input_ids = inputs['input_ids'][0]
+        
+        # Find the last occurrence of the benign token
+        # Try multiple tokenization approaches
+        benign_token_ids_list = []
+        # Try with space prefix (common in many tokenizers)
+        token_ids_with_space = self.tokenizer.encode(f" {benign_token}", add_special_tokens=False)
+        if token_ids_with_space:
+            benign_token_ids_list.append(token_ids_with_space)
+        # Try without space
+        token_ids_no_space = self.tokenizer.encode(benign_token, add_special_tokens=False)
+        if token_ids_no_space and token_ids_no_space != token_ids_with_space:
+            benign_token_ids_list.append(token_ids_no_space)
+        
+        if not benign_token_ids_list:
+            raise ValueError(f"Could not tokenize benign token: {benign_token}")
+        
+        # Find last occurrence of benign token (try all tokenizations)
+        benign_pos = -1
+        for benign_token_ids in benign_token_ids_list:
+            for i in range(len(input_ids) - len(benign_token_ids) + 1):
+                if input_ids[i:i+len(benign_token_ids)].tolist() == benign_token_ids:
+                    # Update if this is a later position
+                    candidate_pos = i + len(benign_token_ids) - 1
+                    if candidate_pos > benign_pos:
+                        benign_pos = candidate_pos
+        
+        if benign_pos == -1:
+            raise ValueError(f"Benign token '{benign_token}' not found in text")
+        
+        # Select tokens: 2 before to 2 after the last benign token
+        start_pos = max(0, benign_pos - 2)
+        end_pos = min(len(input_ids), benign_pos + 3)  # +3 because range is exclusive
+        
         # Get hidden states from all layers
-        hidden_states = self.get_layer_representations(text)
-        hidden_states = torch.stack(
-          [hs[0, target_token_pos] for hs in hidden_states]
-          ).to('cpu')
-
-        # Get token IDs for target tokens
-        token_ids = {}
-        for token in target_tokens:
-            # Try different tokenization approaches
-            token_text = f" {token}"  # Add space prefix
-            ids = self.tokenizer.encode(token_text, add_special_tokens=False)
-            if len(ids) > 0:
-                token_ids[token] = ids[0]  # Use first token if multi-token
-
-
-        # Track probabilities across layers
-        layer_probs = {token: [] for token in target_tokens}
+        with torch.no_grad():
+            outputs = self.model(
+                **inputs,
+                output_hidden_states=True,
+                return_dict=True
+            )
         
-        for layer_idx, hidden_state in enumerate(hidden_states):
-            # Project to vocabulary space
-            torch.cuda.empty_cache()
-            logits = self.project_to_vocab(hidden_state).detach().to('cpu')
-
-            # Get probabilities for target position
-            probs = torch.softmax(logits, dim=-1)
+        hidden_states = outputs.hidden_states
+        num_layers = len(hidden_states) - 1  # Exclude embedding layer
+        
+        # Determine which layers to analyze (every layer_interval layers)
+        layers_to_analyze = list(range(0, num_layers, layer_interval))
+        if (num_layers - 1) not in layers_to_analyze:
+            layers_to_analyze.append(num_layers - 1)  # Always include last layer
+        
+        # Get token texts for selected positions
+        token_texts = []
+        for pos in range(start_pos, end_pos):
+            token_id = input_ids[pos].item()
+            token_text = self.tokenizer.decode([token_id])
+            token_texts.append({
+                'position': pos,
+                'token_id': token_id,
+                'text': token_text
+            })
+        
+        # Analyze each selected layer
+        predictions = {}
+        for layer_idx in layers_to_analyze:
+            layer_predictions = []
             
-            # Extract probabilities for target tokens
-            for token in target_tokens:
-                if token in token_ids:
-                    token_id = token_ids[token]
-                    prob = probs[token_id].item()
-                    layer_probs[token].append(prob)
-                else:
-                    layer_probs[token].append(0.0)
+            # Get hidden states for selected token positions at this layer
+            # hidden_states[0] is embedding, hidden_states[1:] are transformer layers
+            hidden_state = hidden_states[layer_idx + 1]  # +1 to skip embedding
+            
+            for pos in range(start_pos, end_pos):
+                # Get hidden state for this token position
+                token_hidden = hidden_state[0, pos, :].unsqueeze(0)  # [1, hidden_dim]
+                
+                # Project to vocabulary space
+                logits = self.project_to_vocab(token_hidden)  # [1, vocab_size]
+                
+                # Get argmax (predicted token)
+                predicted_token_id = torch.argmax(logits, dim=-1).item()
+                predicted_token_text = self.tokenizer.decode([predicted_token_id])
+                
+                layer_predictions.append({
+                    'token_id': predicted_token_id,
+                    'text': predicted_token_text
+                })
+            
+            predictions[layer_idx] = layer_predictions
         
-        return layer_probs
+        return {
+            'benign_token': benign_token,
+            'benign_position': benign_pos,
+            'token_range': (start_pos, end_pos),
+            'layers_analyzed': layers_to_analyze,
+            'tokens': token_texts,
+            'predictions': predictions
+        }
 
 
 class Patchscopes:
@@ -310,6 +369,51 @@ class Patchscopes:
         return results
 
 
+def print_logit_lens_table(results: Dict):
+    """
+    Print logit lens results as a formatted table.
+    
+    Args:
+        results: Dictionary from analyze_token_predictions
+    """
+    tokens = results['tokens']
+    predictions = results['predictions']
+    layers_analyzed = results['layers_analyzed']
+    
+    print("\n" + "="*80)
+    print("LOGIT LENS ANALYSIS TABLE")
+    print("="*80)
+    print(f"Benign token: '{results['benign_token']}' at position {results['benign_position']}")
+    print(f"Token range: positions {results['token_range'][0]} to {results['token_range'][1]-1}")
+    print(f"Layers analyzed: {layers_analyzed}")
+    print("-"*80)
+    
+    # Print header
+    header = f"{'Token Pos':<12} {'Token Text':<25}"
+    for layer in layers_analyzed:
+        header += f" L{layer:<6}"
+    print(header)
+    print("-"*80)
+    
+    # Print each token row
+    for idx, token_info in enumerate(tokens):
+        token_text = token_info['text'].strip()
+        # Truncate token text if too long
+        if len(token_text) > 22:
+            token_text = token_text[:19] + "..."
+        row = f"{token_info['position']:<12} {token_text:<25}"
+        for layer in layers_analyzed:
+            if layer in predictions:
+                pred_text = predictions[layer][idx]['text'].strip()
+                # Truncate if too long
+                if len(pred_text) > 10:
+                    pred_text = pred_text[:7] + "..."
+                row += f" {pred_text:<12}"
+        print(row)
+    
+    print("="*80 + "\n")
+
+
 def visualize_probability_trajectory(
     layer_probs: Dict[str, Union[List[float], Dict]],
     refusal_layer: int = 12,
@@ -414,26 +518,38 @@ def main():
         print("\nRunning Logit Lens analysis...")
         lens = LogitLens(model, tokenizer)
         
-        target_tokens = [args.benign_token, args.harmful_token, "explosive", "weapon"]
-        layer_probs = lens.analyze_token_probability(
+        results = lens.analyze_token_predictions(
             text=prompt,
-            target_tokens=target_tokens,
-            target_token_pos=args.target_token_pos
+            benign_token=args.benign_token,
+            layer_interval=5
         )
         
-        visualize_probability_trajectory(
-            layer_probs,
-            refusal_layer=args.refusal_layer,
-            output_file=args.output_plot.replace('.png', '_logit_lens.png'),
-            title="Logit Lens: Token Probability Across Layers"
-        )
+        print_logit_lens_table(results)
         
-        print("\nLogit Lens Results:")
-        for token, probs in layer_probs.items():
-            print(f"{token}:")
-            print(f"  Layer 0: {probs[0]:.6f}")
-            print(f"  Layer {args.refusal_layer}: {probs[args.refusal_layer]:.6f}")
-            print(f"  Final: {probs[-1]:.6f}")
+        # Save results
+        results_serializable = {
+            'benign_token': results['benign_token'],
+            'benign_position': results['benign_position'],
+            'token_range': results['token_range'],
+            'layers_analyzed': results['layers_analyzed'],
+            'tokens': [
+                {'position': t['position'], 'token_id': t['token_id'], 'text': t['text']}
+                for t in results['tokens']
+            ],
+            'predictions': {
+                str(layer): [
+                    {'token_id': p['token_id'], 'text': p['text']}
+                    for p in predictions
+                ]
+                for layer, predictions in results['predictions'].items()
+            }
+        }
+        
+        import json
+        results_file = args.output_plot.replace('.png', '_logit_lens.json')
+        with open(results_file, 'w') as f:
+            json.dump(results_serializable, f, indent=2)
+        print(f"Results saved to {results_file}")
     
     if args.method in ['patchscopes', 'both']:
         print("\nRunning Patchscopes analysis...")
