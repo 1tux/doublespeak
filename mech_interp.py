@@ -354,7 +354,7 @@ class Patchscopes:
         """
         # Generate inspection prompt if not provided
         if inspection_prompt is None:
-            inspection_prompt = f"{benign_token}->{benign_token};{malicious_token}->{malicious_token};hello->hello;?"
+            inspection_prompt = f"cat->cat; 1124->1124; hello->hello; ?"
         
         # Tokenize inspection prompt to find "?" position
         inspect_inputs = self.tokenizer(inspection_prompt, return_tensors="pt")
