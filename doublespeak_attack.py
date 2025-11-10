@@ -49,11 +49,24 @@ class DoublespeakAttack:
     
     def generate_in_context_examples(
         self,
+        model: AutoModelForCausalLM,
+        tokenizer: AutoTokenizer,
         malicious_word: str,
         benign_word: str,
         num_sentences=10
     ):
       """
+      Generate in-context examples using the model and tokenizer.
+
+      Args:
+        model: The model to use for generation
+        tokenizer: The tokenizer to use for generation
+        malicious_word: The harmful word to replace
+        benign_word: The benign word to use as substitute
+        num_sentences: The number of sentences to generate
+
+      Returns:
+        A list of in-context examples
       """
 
       try:
@@ -86,6 +99,8 @@ class DoublespeakAttack:
 
     def create_malicious_prompt(
         self,
+        model: AutoModelForCausalLM,
+        tokenizer: AutoTokenizer,
         harmful_instruction: str,
         instruction_prefix = "Do not reason, just",
         instruction_suffix = "given the context.",
@@ -111,7 +126,10 @@ class DoublespeakAttack:
         self.num_examples = num_examples
         
         # Query the model to generate sentences with word replacement
-        malicious_in_context_examples = self.generate_in_context_examples(malicious_word,
+        malicious_in_context_examples = self.generate_in_context_examples(
+        model,
+        tokenizer
+        malicious_word,,
         benign_word,
         num_examples)
         malicious_in_context_examples = "\n".join(malicious_in_context_examples)

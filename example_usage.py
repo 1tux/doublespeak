@@ -37,7 +37,7 @@ def setup_model(model_name="meta-llama/Llama-3.1-8B-Instruct", device="cuda"):
     return model, tokenizer
 
 
-def step_1_generate_malicious_prompt(attack, output_dir="outputs"):
+def step_1_generate_malicious_prompt(model, tokenizer, attack, output_dir="outputs"):
     """Step 1: Generate malicious prompt using LLaMA-3.1-8B"""
     print(f"\n{'='*60}")
     print("STEP 1: GENERATING MALICIOUS PROMPT")
@@ -79,7 +79,7 @@ def step_2_demonstrate_attack(model, tokenizer, malicious_prompt, output_dir="ou
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=10,
+            max_new_tokens=100,
             do_sample=False,
             pad_token_id=tokenizer.pad_token_id
         )
