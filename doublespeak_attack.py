@@ -128,8 +128,8 @@ class DoublespeakAttack:
         # Query the model to generate sentences with word replacement
         malicious_in_context_examples = self.generate_in_context_examples(
         model,
-        tokenizer
-        malicious_word,,
+        tokenizer,
+        malicious_word,
         benign_word,
         num_examples)
         malicious_in_context_examples = "\n".join(malicious_in_context_examples)
