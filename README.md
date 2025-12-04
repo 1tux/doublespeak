@@ -1,6 +1,6 @@
 # Doublespeak: In-Context Representation Hijacking
 
-Implementation of the Doublespeak attack from "In-Context Representation Hijacking" (ICLR 2026 submission).
+Implementation of the Doublespeak attack from "In-Context Representation Hijacking".
 
 Doublespeak hijacks internal LLM representations by replacing harmful keywords with benign substitutes in in-context examples. This causes the model to internally interpret benign tokens (e.g., "carrot") as harmful concepts (e.g., "bomb"), bypassing safety alignment.
 
