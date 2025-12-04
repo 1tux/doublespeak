@@ -203,11 +203,14 @@ DO NOT use this to:
 ## 📄 Citation
 
 ```bibtex
-@inproceedings{doublespeak2026,
-  title={In-Context Representation Hijacking},
-  author={Anonymous},
-  booktitle={International Conference on Learning Representations (ICLR)},
-  year={2026}
+@misc{yona2025incontextrepresentationhijacking,
+      title={In-Context Representation Hijacking}, 
+      author={Itay Yona and Amir Sarid and Michael Karasik and Yossi Gandelsman},
+      year={2025},
+      eprint={2512.03771},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2512.03771}, 
 }
 ```
 
@@ -218,4 +221,3 @@ MIT License (for research purposes only)
 ## 🔒 Responsible Disclosure
 
 This work was shared with safety teams at major AI labs prior to publication. Please use responsibly.
-
